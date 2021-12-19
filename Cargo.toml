@@ -1,0 +1,16 @@
+[package]
+name = "localcert"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+web = ["acme/web", "http-client/wasm_client"]
+
+[dependencies]
+acme = { path = "../acme-rs" }
+async-timer = "0.7"
+base64 = "0.13"
+http-client = { version = "6.5", default_features = false }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["raw_value"] }
+thiserror = "1.0"
