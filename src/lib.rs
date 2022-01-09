@@ -4,14 +4,14 @@ pub mod wire;
 
 use std::{sync::Arc, time::Duration};
 
-use acme::{
-    api::{account::Account, acme_server::RegisterAccountConfig},
-    AcmeServer,
-};
+use acme::{api::account::Account, Client};
 use error::LocalcertResult;
 use http_client::HttpClient;
 use states::RegisteredState;
 use wire::client::LocalcertClient;
+
+pub use acme::api::client::RegisterAccountConfig;
+pub use acme::crypto::account_key::AccountKey;
 
 pub static DEFAULT_SERVER_URL: &str = "https://localcert.dev";
 pub static DEFAULT_ACME_POLLING_INTERVAL: Duration = Duration::from_secs(5);
@@ -23,9 +23,9 @@ pub struct ConfigBuilder {
 }
 
 impl ConfigBuilder {
-    #[cfg(feature = "http_native_client")]
+    #[cfg(all(feature = "web", target_arch = "wasm32"))]
     pub fn new() -> Self {
-        Self::with_http_client(http_client::native::NativeClient::new())
+        Self::with_http_client(http_client::wasm::WasmClient::new())
     }
 
     pub fn with_http_client(http_client: impl HttpClient) -> Self {
@@ -51,17 +51,17 @@ impl ConfigBuilder {
         acme_directory_url: &str,
         register_config: RegisterAccountConfig,
     ) -> LocalcertResult<RegisteredState> {
-        let server =
-            AcmeServer::for_directory_url(self.http_client.clone(), acme_directory_url).await?;
-        let account = server.register_account_config(register_config).await?;
+        let acme_client =
+            Client::for_directory_url(self.http_client.clone(), acme_directory_url).await?;
+        let account = acme_client.register_account_config(register_config).await?;
         self.build_with_account(account)
     }
 
     pub fn build_with_account(self, acme_account: Account) -> LocalcertResult<RegisteredState> {
         let base_url = self.server_url.as_deref().unwrap_or(DEFAULT_SERVER_URL);
-        let client = LocalcertClient::new(self.http_client, base_url)?;
+        let localcert_client = LocalcertClient::new(self.http_client, base_url)?;
         Ok(RegisteredState::new(
-            client,
+            localcert_client,
             acme_account,
             self.acme_polling_interval,
         ))

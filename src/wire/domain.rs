@@ -8,6 +8,7 @@ pub struct DomainRequest<R: Serialize> {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DomainResult {
-    pub domain: String,
+    pub localcert_domain: String,
 }

@@ -10,8 +10,9 @@ pub struct ProvisionRequest<K: Serialize, R: Serialize> {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ProvisionResult {
+    #[serde(rename = "authorizationURL")]
     pub authorization_url: String,
+    #[serde(rename = "provisionedChallengeURL")]
     pub provisioned_challenge_url: String,
 }

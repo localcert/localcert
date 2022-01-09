@@ -5,13 +5,14 @@ use acme::{
         account::Account,
         authorization::Authorization,
         challenge::ChallengeState,
-        order::{GeneratedKey, Order, OrderState},
+        order::{Order, OrderState},
     },
+    crypto::account_key::AccountKey,
     wire::{
         authorization::AuthorizationStatus, challenge::CHALLENGE_TYPE_DNS_01, order::OrderStatus,
     },
+    AcmeError,
 };
-use async_timer::Oneshot;
 
 use crate::{
     error::{LocalcertError, LocalcertResult},
@@ -41,9 +42,21 @@ impl RegisteredState {
         &self.account
     }
 
+    pub fn private_key_jwk(&self) -> LocalcertResult<String> {
+        Ok(self
+            .account
+            .key()
+            .private_jwk()
+            .map_err(AcmeError::CryptoError)?
+            .to_string())
+    }
+
     pub async fn new_order(self) -> LocalcertResult<OrderedState> {
         let domain_result = self.client.get_domain(&self.account).await?;
-        let order = self.account.new_dns_order(domain_result.domain).await?;
+        let order = self
+            .account
+            .new_dns_order(domain_result.localcert_domain)
+            .await?;
         Ok(self.with_order(order))
     }
 
@@ -96,9 +109,7 @@ impl State {
         if self.order.status() == status {
             // TODO: timeout
             self.order
-                .status_changed(|| {
-                    <async_timer::oneshot::Timer as Oneshot>::new(self.acme_polling_interval)
-                })
+                .status_changed(|| async_timer::new_timer(self.acme_polling_interval))
                 .await?;
         }
         Ok(self.order.status_result()?)
@@ -110,6 +121,15 @@ pub struct OrderedState(State);
 impl OrderedState {
     pub fn order_url(&self) -> &str {
         self.0.order.url()
+    }
+
+    pub fn domain(&self) -> LocalcertResult<String> {
+        Ok(self
+            .0
+            .order
+            .dns_name()
+            .ok_or(LocalcertError::StateError("not a DNS order".to_string()))?
+            .into())
     }
 
     pub async fn authorize(mut self) -> LocalcertResult<AuthorizedState> {
@@ -127,13 +147,14 @@ impl OrderedState {
 pub struct AuthorizedState(State);
 
 impl AuthorizedState {
+    #[cfg(feature = "x509")]
     pub async fn finalize_with_generated_key(
         mut self,
-    ) -> LocalcertResult<(GeneratedKey, FinalizedState)> {
+    ) -> LocalcertResult<(String, FinalizedState)> {
         match self.0.order.state_result()? {
             OrderState::Ready(mut ready) => {
-                let generated_key = ready.finalize_with_generated_key().await?;
-                Ok((generated_key, FinalizedState(self.0)))
+                let generated_key_pem = ready.finalize_with_generated_key().await?;
+                Ok((generated_key_pem, FinalizedState(self.0)))
             }
             _ => Err(LocalcertError::unexpected_status(
                 "order",
