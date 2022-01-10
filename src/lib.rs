@@ -48,12 +48,26 @@ impl ConfigBuilder {
 
     pub async fn register_new_account(
         self,
-        acme_directory_url: &str,
+        acme_directory_url: impl AsRef<str>,
         register_config: RegisterAccountConfig,
     ) -> LocalcertResult<RegisteredState> {
         let acme_client =
-            Client::for_directory_url(self.http_client.clone(), acme_directory_url).await?;
+            Client::for_directory_url(self.http_client.clone(), acme_directory_url.as_ref())
+                .await?;
         let account = acme_client.register_account_config(register_config).await?;
+        self.build_with_account(account)
+    }
+
+    pub async fn find_account(
+        self,
+        acme_directory_url: impl AsRef<str>,
+        account_key_jwk: impl AsRef<str>,
+    ) -> LocalcertResult<RegisteredState> {
+        let account_key = acme::crypto::account_key_from_jwk(account_key_jwk)?;
+        let acme_client =
+            Client::for_directory_url(self.http_client.clone(), acme_directory_url.as_ref())
+                .await?;
+        let account = acme_client.find_account(account_key).await?;
         self.build_with_account(account)
     }
 
